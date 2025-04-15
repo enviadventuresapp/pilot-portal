@@ -1,0 +1,41 @@
+
+project_id = "thiunrmlrrsmatymwjul"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://localhost"
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+
+[realtime]
+enabled = true
+
+[functions]
+[functions.get_all_aircraft]
+verify_jwt = true
+
+[functions.get_all_pilots] 
+verify_jwt = true
+
+[functions.get_all_flights]
+verify_jwt = true
+
+[functions.get_aircraft_and_pilots]
+verify_jwt = true
