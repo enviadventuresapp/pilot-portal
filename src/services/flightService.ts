@@ -323,7 +323,6 @@ export const updateFlight = async (id: string, flight: Partial<Flight>) => {
  */
 export const deleteFlight = async (id: string) => {
   try {
-    await ensureSession();
     
     // Use a stored procedure to delete a flight
     const { data, error } = await supabase.functions.invoke('delete_flight', {

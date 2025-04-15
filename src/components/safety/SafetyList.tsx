@@ -1,14 +1,24 @@
 import { useEffect, useState } from 'react';
-import { getAllSafetyReports } from '@/services/safetyService';
+import { getAllSafetyReports, deleteSafetyReport } from '@/services/safetyService';
 import { SafetyReport } from '@/types';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
-import { Search, SlidersHorizontal, AlertCircle } from 'lucide-react';
+import { Search, SlidersHorizontal, AlertCircle, Plus, Edit, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuthContext } from '@/contexts/AuthContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const getSeverityColor = (severity: string) => {
   switch (severity.toLowerCase()) {
@@ -45,47 +55,82 @@ export const SafetyList = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [userHasSubmitted, setUserHasSubmitted] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isAdmin } = useAuthContext();
+  const { isAdmin, user } = useAuthContext();
 
   useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        console.log("Fetching safety reports...");
-        const { success, reports: fetchedReports, error } = await getAllSafetyReports();
+    if (isAdmin) {
+      fetchReports();
+    } else {
+      // Just check if the current user has submitted a report already
+      checkUserSubmission();
+    }
+  }, [isAdmin, user?.id]);
 
-        if (success && fetchedReports) {
-          console.log("Fetched reports:", fetchedReports);
-          setReports(fetchedReports);
-        } else if (error) {
-          console.error("Error fetching reports:", error);
-          setError(error);
-          toast({
-            title: "Error loading reports",
-            description: error,
-            variant: "destructive"
-          });
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log("Fetching safety reports...");
+      const { success, reports: fetchedReports, error } = await getAllSafetyReports();
+
+      if (success && fetchedReports) {
+        console.log("Fetched reports:", fetchedReports);
+        setReports(fetchedReports);
+        
+        // Check if the non-admin user has submitted a report
+        if (!isAdmin && user?.id) {
+          const hasSubmitted = fetchedReports.some(report => report.reporterId === user.id);
+          setUserHasSubmitted(hasSubmitted);
         }
-      } catch (error) {
-        console.error('Error fetching safety reports:', error);
-        setError('Failed to load report data.');
+      } else if (error) {
+        console.error("Error fetching reports:", error);
+        setError(error);
         toast({
-          title: "Error",
-          description: "Failed to load safety reports",
+          title: "Error loading reports",
+          description: error,
           variant: "destructive"
         });
-      } finally {
-        setTimeout(() => {
-          setLoading(false);
-        }, 300);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching safety reports:', error);
+      setError('Failed to load report data.');
+      toast({
+        title: "Error",
+        description: "Failed to load safety reports",
+        variant: "destructive"
+      });
+    } finally {
+      setTimeout(() => {
+        setLoading(false);
+      }, 300);
+    }
+  };
 
-    fetchReports();
-  }, [toast]);
+  const checkUserSubmission = async () => {
+    try {
+      setLoading(true);
+      if (!user?.id) {
+        setUserHasSubmitted(false);
+        return;
+      }
+
+      const { success, reports: fetchedReports } = await getAllSafetyReports();
+      if (success && fetchedReports) {
+        const hasSubmitted = fetchedReports.some(report => report.reporterId === user.id);
+        setUserHasSubmitted(hasSubmitted);
+      }
+    } catch (error) {
+      console.error('Error checking user submission:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddNew = () => {
     navigate('/safety/new');
@@ -96,7 +141,60 @@ export const SafetyList = () => {
   };
 
   const handleViewReport = (reportId: string) => {
-    navigate(`/safety/${reportId}`);
+    if (isAdmin) {
+      navigate(`/safety/${reportId}`);
+    }
+  };
+
+  const handleEditReport = (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation();
+    if (isAdmin) {
+      navigate(`/safety/${reportId}`);
+    }
+  };
+
+  const handleDeleteReport = (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation();
+    if (isAdmin) {
+      setReportToDelete(reportId);
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!reportToDelete) return;
+    
+    try {
+      setDeleteLoading(true);
+      const { success, error } = await deleteSafetyReport(reportToDelete);
+      
+      if (success) {
+        // Remove from local state
+        setReports(reports.filter(report => report.id !== reportToDelete));
+        toast({
+          title: "Success",
+          description: "Safety report deleted successfully",
+        });
+      } else {
+        console.error("Error deleting report:", error);
+        toast({
+          title: "Error",
+          description: "Failed to delete safety report",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting safety report:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete safety report",
+        variant: "destructive"
+      });
+    } finally {
+      setDeleteLoading(false);
+      setDeleteDialogOpen(false);
+      setReportToDelete(null);
+    }
   };
 
   const filteredReports = reports.filter(report =>
@@ -106,34 +204,16 @@ export const SafetyList = () => {
     report.status?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (error && !loading) {
+  if (error && !loading && isAdmin) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Safety Management System</h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleAdminReview}>
-              Admin Review
-            </Button>
             <Button onClick={handleAddNew}>
               New Report
             </Button>
           </div>
-        </div>
-
-        <div className="flex justify-between items-center">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search reports..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2"
-            />
-          </div>
-          <Button variant="ghost" size="icon">
-            <SlidersHorizontal className="h-4 w-4" />
-          </Button>
         </div>
 
         <div className="bg-red-500 text-white p-6 rounded-md shadow">
@@ -149,18 +229,62 @@ export const SafetyList = () => {
     );
   }
 
+  // For regular users, show a simplified view
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Safety Management System</h1>
+          <div className="flex gap-2">
+            <Button 
+              onClick={handleAddNew} 
+              className="bg-blue-500 hover:bg-blue-600"
+              disabled={userHasSubmitted}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Submit Report
+            </Button>
+          </div>
+        </div>
+
+        <div className="bg-white shadow rounded-lg overflow-hidden p-6">
+          {loading ? (
+            <div className="flex justify-center p-6">
+              <Skeleton className="h-16 w-full max-w-lg" />
+            </div>
+          ) : userHasSubmitted ? (
+            <div className="text-center p-6 bg-green-50 border border-green-100 rounded-lg">
+              <h3 className="text-lg font-medium text-green-800">Thank you for your submission</h3>
+              <p className="mt-2 text-green-600">
+                You have already submitted a safety report. Our safety team will review it and may contact you for additional information.
+              </p>
+            </div>
+          ) : (
+            <div className="text-center p-6">
+              <h3 className="text-lg font-medium">Safety Reporting</h3>
+              <p className="mt-2 text-gray-600">
+                Use this system to report any safety concerns. Your reports are confidential and will be reviewed by our safety team.
+              </p>
+              <p className="mt-4 text-gray-600">
+                Click the "Submit Report" button above to create a new safety report.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Admin view with full capabilities
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Safety Management System</h1>
         <div className="flex gap-2">
-          {isAdmin && (
-            <Button variant="outline" onClick={handleAdminReview}>
-              Admin Review
-            </Button>
-          )}
+          <Button variant="outline" onClick={handleAdminReview}>
+            Admin Dashboard
+          </Button>
           <Button onClick={handleAddNew} className="bg-blue-500 hover:bg-blue-600">
-            New Report
+            <Plus className="h-4 w-4 mr-2" /> New Report
           </Button>
         </div>
       </div>
@@ -238,7 +362,11 @@ export const SafetyList = () => {
                 </tr>
               ) : (
                 filteredReports.map((report) => (
-                  <tr key={report.id} className="hover:bg-gray-50">
+                  <tr 
+                    key={report.id} 
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleViewReport(report.id)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {new Date(report.reportDate).toLocaleDateString()}
                     </td>
@@ -251,15 +379,33 @@ export const SafetyList = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge className={getStatusColor(report.status)}>{report.status}</Badge>
                     </td>
-                    {isAdmin && (<td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewReport(report.id)}
-                      >
-                        View
-                      </Button>
-                    </td>)}
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewReport(report.id)}
+                        >
+                          View
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-blue-600"
+                          onClick={(e) => handleEditReport(e, report.id)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-red-600"
+                          onClick={(e) => handleDeleteReport(e, report.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -267,6 +413,27 @@ export const SafetyList = () => {
           </table>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the safety report from the system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              disabled={deleteLoading}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {deleteLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
