@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { getAllFlights, deleteFlight } from '@/services/flightService';
-import { Flight } from '@/types';
+import { Flight, Aircraft } from '@/types';
 import { format } from 'date-fns';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertCircle, Plus, RefreshCw, Search, Filter, Edit2Icon, Trash2 } from 'lucide-react';
+import { AlertTriangle, Plus, RefreshCw, Search, Filter, Edit2Icon, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { safeToFixed, calculateTachDiff, ensureNumber } from '@/utils/numberUtils';
@@ -22,9 +22,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { getAllAircraft } from '@/services/aircraftService';
 
 export function FlightList() {
   const [flights, setFlights] = useState<Flight[]>([]);
+  const [aircraftList, setAircraftList] = useState<Aircraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -34,30 +36,32 @@ export function FlightList() {
   const { toast } = useToast();
   const { isAdmin } = useAuthContext();
 
-  const fetchFlights = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const { success, flights: fetchedFlights, error: fetchError } = await getAllFlights();
+      
+      // Fetch flights and aircraft in parallel
+      const [flightsResponse, aircraftResponse] = await Promise.all([
+        getAllFlights(),
+        getAllAircraft()
+      ]);
 
-      if (success && fetchedFlights) {
-        console.log('Loaded flights:', fetchedFlights);
-        setFlights(fetchedFlights);
+      if (flightsResponse.success && flightsResponse.flights) {
+        setFlights(flightsResponse.flights);
       } else {
-        const errorMessage = fetchError instanceof Error ? fetchError.message : 'Failed to load flight data';
-        console.error('Error fetching flights:', errorMessage);
-        setError(new Error(errorMessage));
+        throw new Error(flightsResponse.error?.message || 'Failed to load flights');
+      }
 
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load flight data. Please try again later."
-        });
+      if (aircraftResponse.success && aircraftResponse.aircraft) {
+        setAircraftList(aircraftResponse.aircraft);
+      } else {
+        throw new Error(aircraftResponse.error?.message || 'Failed to load aircraft');
       }
     } catch (err) {
-      console.error('Error in fetchFlights:', err);
+      console.error('Error fetching data:', err);
       setError(err instanceof Error ? err : new Error('An unknown error occurred'));
-
+      
       toast({
         variant: "destructive",
         title: "Error",
@@ -69,8 +73,13 @@ export function FlightList() {
   };
 
   useEffect(() => {
-    fetchFlights();
+    fetchData();
   }, []);
+
+  const getAircraftTailNumber = (aircraftId: string) => {
+    const aircraft = aircraftList.find(a => a.id === aircraftId);
+    return aircraft?.tailNumber || aircraftId; // Fallback to ID if not found
+  };
 
   const handleNewFlightClick = () => {
     navigate('/flights/new');
@@ -99,21 +108,13 @@ export function FlightList() {
       const { success, error: deleteError } = await deleteFlight(flightToDelete);
       
       if (success) {
-        // Remove from local state
         setFlights(flights.filter(flight => flight.id !== flightToDelete));
         toast({
           title: "Success",
           description: "Flight deleted successfully",
         });
       } else {
-        const errorMessage = deleteError instanceof Error ? deleteError.message : 'Failed to delete flight';
-        console.error('Error deleting flight:', errorMessage);
-        
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to delete flight. Please try again later."
-        });
+        throw new Error(deleteError?.message || 'Failed to delete flight');
       }
     } catch (err) {
       console.error('Error in confirmDelete:', err);
@@ -121,7 +122,7 @@ export function FlightList() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete flight. Please try again later."
+        description: err instanceof Error ? err.message : "Failed to delete flight. Please try again later."
       });
     } finally {
       setDeleteLoading(false);
@@ -131,7 +132,7 @@ export function FlightList() {
   };
 
   const handleRetry = () => {
-    fetchFlights();
+    fetchData();
   };
 
   if (loading) {
@@ -216,7 +217,6 @@ export function FlightList() {
                   <TableHead>Date</TableHead>
                   <TableHead>Departure Time</TableHead>
                   <TableHead>Aircraft</TableHead>
-                  <TableHead>Pilot</TableHead>
                   <TableHead>Tach Total</TableHead>
                   <TableHead>Hobbs</TableHead>
                   <TableHead>Passengers</TableHead>
@@ -237,8 +237,14 @@ export function FlightList() {
                       {flight.date ? format(new Date(flight.date), 'MM/dd/yyyy') : 'N/A'}
                     </TableCell>
                     <TableCell>{flight.departureTime || 'N/A'}</TableCell>
-                    <TableCell>{flight.aircraftId}</TableCell>
-                    <TableCell>{flight.pilotName || 'Unknown'}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {flight.squawks && (
+                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                        )}
+                        {getAircraftTailNumber(flight.aircraftId)}
+                      </div>
+                    </TableCell>
                     <TableCell>{safeToFixed(calculateTachDiff(flight.tachEnd, flight.tachStart), 1)}</TableCell>
                     <TableCell>{safeToFixed(flight.hobbsTime, 1)} hrs</TableCell>
                     <TableCell>{ensureNumber(flight.passengerCount) || '0'}</TableCell>
@@ -250,34 +256,29 @@ export function FlightList() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFlightClick(flight.id);
-                          }}
+                          onClick={() => handleFlightClick(flight.id)}
                         >
                           View
                         </Button>
                         
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-blue-600"
+                          onClick={(e) => handleEditClick(e, flight.id)}
+                        >
+                          <Edit2Icon className="h-4 w-4" />
+                        </Button>
+                        
                         {isAdmin && (
-                          <>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-blue-600"
-                              onClick={(e) => handleEditClick(e, flight.id)}
-                            >
-                              <Edit2Icon className="h-4 w-4" />
-                            </Button>
-                            
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-red-600"
-                              onClick={(e) => handleDeleteClick(e, flight.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-red-600"
+                            onClick={(e) => handleDeleteClick(e, flight.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         )}
                       </div>
                     </TableCell>
