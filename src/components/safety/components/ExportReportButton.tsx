@@ -18,19 +18,19 @@ export const ExportReportButton: React.FC<ExportReportButtonProps> = ({ report }
     window.print();
   };
   
-  const exportToPDF = () => {
-    setIsExporting(true);
+  // const exportToPDF = () => {
+  //   setIsExporting(true);
     
-    // In a real implementation, we would use a PDF library like jsPDF or pdfmake
-    // For this example, we'll just simulate the export with a delay
-    setTimeout(() => {
-      toast({
-        title: "Export successful",
-        description: "Safety report exported to PDF format"
-      });
-      setIsExporting(false);
-    }, 1000);
-  };
+  //   // In a real implementation, we would use a PDF library like jsPDF or pdfmake
+  //   // For this example, we'll just simulate the export with a delay
+  //   setTimeout(() => {
+  //     toast({
+  //       title: "Export successful",
+  //       description: "Safety report exported to PDF format"
+  //     });
+  //     setIsExporting(false);
+  //   }, 1000);
+  // };
   
   const exportToCSV = () => {
     setIsExporting(true);
@@ -93,7 +93,7 @@ export const ExportReportButton: React.FC<ExportReportButtonProps> = ({ report }
           <Printer className="h-4 w-4" />
           <span>Print</span>
         </Button>
-        <Button
+        {/* <Button
           onClick={exportToPDF}
           size="sm"
           variant="outline"
@@ -102,7 +102,7 @@ export const ExportReportButton: React.FC<ExportReportButtonProps> = ({ report }
         >
           <FileText className="h-4 w-4" />
           <span>Export PDF</span>
-        </Button>
+        </Button> */}
         <Button
           onClick={exportToCSV}
           size="sm"

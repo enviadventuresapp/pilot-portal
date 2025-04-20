@@ -82,7 +82,7 @@ export const SafetyList = () => {
       if (success && fetchedReports) {
         console.log("Fetched reports:", fetchedReports);
         setReports(fetchedReports);
-        
+
         // Check if the non-admin user has submitted a report
         if (!isAdmin && user?.id) {
           const hasSubmitted = fetchedReports.some(report => report.reporterId === user.id);
@@ -141,33 +141,31 @@ export const SafetyList = () => {
   };
 
   const handleViewReport = (reportId: string) => {
-    if (isAdmin) {
-      navigate(`/safety/${reportId}`);
-    }
+    if (!isAdmin) return;
+    navigate(`/safety/${reportId}`);
   };
+
 
   const handleEditReport = (e: React.MouseEvent, reportId: string) => {
     e.stopPropagation();
-    if (isAdmin) {
-      navigate(`/safety/${reportId}`);
-    }
+    if (!isAdmin) return;
+    navigate(`/safety/${reportId}/edit`);
   };
 
   const handleDeleteReport = (e: React.MouseEvent, reportId: string) => {
     e.stopPropagation();
-    if (isAdmin) {
-      setReportToDelete(reportId);
-      setDeleteDialogOpen(true);
-    }
+    if (!isAdmin) return;
+    setReportToDelete(reportId);
+    setDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
     if (!reportToDelete) return;
-    
+
     try {
       setDeleteLoading(true);
       const { success, error } = await deleteSafetyReport(reportToDelete);
-      
+
       if (success) {
         // Remove from local state
         setReports(reports.filter(report => report.id !== reportToDelete));
@@ -236,8 +234,8 @@ export const SafetyList = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Safety Management System</h1>
           <div className="flex gap-2">
-            <Button 
-              onClick={handleAddNew} 
+            <Button
+              onClick={handleAddNew}
               className="bg-blue-500 hover:bg-blue-600"
               disabled={userHasSubmitted}
             >
@@ -362,8 +360,8 @@ export const SafetyList = () => {
                 </tr>
               ) : (
                 filteredReports.map((report) => (
-                  <tr 
-                    key={report.id} 
+                  <tr
+                    key={report.id}
                     className="hover:bg-gray-50 cursor-pointer"
                     onClick={() => handleViewReport(report.id)}
                   >
@@ -388,17 +386,17 @@ export const SafetyList = () => {
                         >
                           View
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-blue-600"
                           onClick={(e) => handleEditReport(e, report.id)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-red-600"
                           onClick={(e) => handleDeleteReport(e, report.id)}
                         >
@@ -424,8 +422,8 @@ export const SafetyList = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={confirmDelete} 
+            <AlertDialogAction
+              onClick={confirmDelete}
               disabled={deleteLoading}
               className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             >
